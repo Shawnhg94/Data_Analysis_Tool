@@ -18,4 +18,7 @@ class ObjectPrompt:
     def clear(self):
         self.input_label.clear()
         self.input_position.clear()
+
+    def getId(self):
+        return self.object_id
     

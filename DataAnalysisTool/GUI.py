@@ -9,6 +9,10 @@ import numpy as np
 import cv2
 import image_processor
 from object_prompt import ObjectPrompt
+from object_manager import ObjectManager
+import colour_map
+from threading import Thread
+from time import sleep
 
 
 class DataAnalysisToolGUI:
@@ -52,10 +56,14 @@ class DataAnalysisToolGUI:
         self.annotation_label = tk.Label(self.border, text=' Label ', relief=tk.FLAT)
         self.annotation_label.grid(column = 1, row = 2, padx = 10, pady = 10, sticky="sw")
 
+        # Object Manager
+        self.obj_mnger = ObjectManager()
+        self.label_lists = self.obj_mnger.get_object_lists()
+
         # Create a Option menu for setting channel
         self.label_var = tk.StringVar()
-        self.label_var.set('car')
-        self.label_option = tk.OptionMenu(self.border, self.label_var, "car", "road line", "road signs", "motercycle", "traffic light")
+        self.label_var.set(self.label_lists[0])
+        self.label_option = tk.OptionMenu(self.border, self.label_var, *self.label_lists)
         self.label_option.config(width=13)
         self.label_option.grid(column = 1, row = 3, padx = 10, pady = 10, sticky="nsew")
 
@@ -73,17 +81,18 @@ class DataAnalysisToolGUI:
 
         # Create a Option menu for Tracking Objects
         self.objects_var = tk.StringVar()
-        self.objects_var.set('object1')
-        self.objects_option = tk.OptionMenu(self.border, self.objects_var, "object_1",  "object_2",  "object_3",  "object_4",  "object_5", command=self.object_select)
+        self.objects_var.set('object_0')
+        self.objects_option = tk.OptionMenu(self.border, self.objects_var, "object_0", command=self.object_select)
         self.objects_option.config(width=10)
         self.objects_option.grid(column = 1, row = 8, padx = 10, pady = 10, sticky="nsew")
 
+    
         # Set Obj instances
         self.object_prompts = {}
-        for i in range(1, 6):
-            obj_promt = ObjectPrompt(i)
-            self.object_prompts.update({i: obj_promt})
-        self.current_object = self.object_prompts.get(1)
+        obj_promt = ObjectPrompt(0)
+        self.object_prompts.update({0: obj_promt})
+        self.current_object = self.object_prompts.get(0)
+        self.objects_option_len = 1
 
         # Create a "Add" button
         self.object_add_button = tk.Button(self.border, text="  Add ", command=self.add_object)
@@ -120,6 +129,13 @@ class DataAnalysisToolGUI:
         self.save_data_button = tk.Button(self.border, text="Save Data", command=self.save_data)
         self.save_data_button.grid(column = 1, row = 13, padx = 10, pady = 10, sticky="nw")
 
+        # Player
+        self.player_state = False
+        self.player_thread = None
+
+        sam2_repository.test()
+
+
     
     def load_directory(self):
         # Open a file selection dialog box to choose an image file
@@ -129,6 +145,7 @@ class DataAnalysisToolGUI:
         self.frame_num = num_images
         self.showFrameController()
         self.showImage(0)
+        self.reset()
 
 
     def load_image(self):
@@ -157,7 +174,7 @@ class DataAnalysisToolGUI:
         self.set_label_button.grid(column = 1, row = 3, padx = 10, pady = 10, sticky="nw")
 
         # Create a "pause" button
-        self.set_label_button = tk.Button(self.image_border, text="pause", command=self.play_frame)
+        self.set_label_button = tk.Button(self.image_border, text="pause", command=self.pause_frame)
         self.set_label_button.grid(column = 1, row = 3, padx = 70, pady = 10, sticky="nw")
 
         #  Create a Scale widget for setting Slice ID        
@@ -207,10 +224,9 @@ class DataAnalysisToolGUI:
 
     def object_select(self, event):
         print(event)
-        objects = {"object_1": 1, "object_2": 2, "object_3": 3, "object_4": 4, "object_5": 5}
-        obj_idx = objects.get(self.objects_var.get())
+        obj_idx = self.objects_option["menu"].index(self.objects_var.get())
+        print('current index: ' , obj_idx)
         self.current_object = self.object_prompts.get(obj_idx)
-        
 
 
     def click_event(self, event):
@@ -231,27 +247,62 @@ class DataAnalysisToolGUI:
         for obj_prompt in self.object_prompts.values():
             if not obj_prompt.isActivate():
                 continue
+            obj_id = obj_prompt.getId()
             for i in range(0, len(obj_prompt.input_position)):
                 pos = obj_prompt.input_position[i]
                 label = obj_prompt.input_label[i]
                 if label == 1:
-                    cv2.drawMarker(np_origin, (pos[0], pos[1]), (0, 250, 0), cv2.MARKER_STAR, 10, 1)
+                    cv2.drawMarker(np_origin, (pos[0], pos[1]), colour_map.colour_map(obj_id), cv2.MARKER_STAR, 10, 1)
                 if label == 0:
                     cv2.drawMarker(np_origin, (pos[0], pos[1]), (250, 0, 0), cv2.MARKER_STAR, 10, 1)
         update_image = Image.fromarray(np_origin)
         self.updateImage(update_image)
+        # update object options if needed 
+        self.update_options()
+
+    def update_options(self):
+        if (self.current_object.getId() != self.objects_option_len -1):
+            print('update_options return')
+            return
+        #self.objects_var.set('')
+        choice = 'object_{}'.format(self.objects_option_len)
+        self.objects_option['menu'].add_command(label = choice, command=tk._setit(self.objects_var, choice, self.object_select))
+        # update object_prompts
+        obj_promt = ObjectPrompt(self.objects_option_len)
+        self.object_prompts.update({self.objects_option_len: obj_promt})
+        self.objects_option_len += 1
+
 
     def play_frame(self):
-        pass
+        player_thread = Thread(target=self.start_playback)
+        self.player_state = True
+        player_thread.start()
+
+    def start_playback(self):
+        frame_id = self.slice_var.get()
+        for i in range(frame_id, self.frame_num):
+            # print(self.player_state)
+            if self.player_state == False:
+                break
+            self.showImage(i)
+            self.slice_var.set(i)
+            sleep(0.066)
+        
 
     def pause_frame(self):
-        pass
+        self.player_state = False
+        # self.player_thread.join()
+        # self.player_thread = None
 
     def set_label(self):
-        pass
+        entity_name = self.label_var.get()
+        obj_id = self.current_object.getId()
+        print("entity_name: {}, obj_id: {}".format(entity_name, obj_id))
+        self.obj_mnger.set(obj_index= obj_id, obj_name=entity_name)
 
     def clear_label(self):
-        pass
+        obj_id = self.current_object.getId()
+        self.obj_mnger.unset(obj_id)
 
     def add_object(self):
         self.object_input_mode = 'add'
@@ -261,7 +312,7 @@ class DataAnalysisToolGUI:
 
     def check_preview(self):
         frame_id = self.slice_var.get()
-        update_image, _, _ = sam2_repository.viewPreview(image_processor.image_preprocessing_output, frame_id, self.object_prompts)
+        update_image, _, _, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
         #update_image = Image.open('output/{}.png'.format(frame_id))
         self.updateOutputImage(update_image)
     
@@ -272,29 +323,30 @@ class DataAnalysisToolGUI:
         self.showImage(frame_id)
         return
         frame_id = self.slice_var.get()
-        update_image, predictor, inference_state = sam2_repository.viewPreview(image_processor.image_preprocessing_output, frame_id, self.object_prompts)
-        self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, self.frame_num)
+        update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
+        self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, self.frame_num, h, w, objMngr = self.obj_mnger)
 
         self.updateOutputImage(update_image)
         
-        #mask = sam2_repository.doImagePredic(self.origin_image, self.input_position, self.input_label)
-        # mask_file = io.BytesIO()
-        # plt.imsave(mask_file, mask, cmap = 'BrBG')
-        # self.updateOutputImage(Image.open(mask_file))
-        # mask_file.close()
+    def reset(self):
+        self.tracking_done = False
+        self.showImage(0)
+        self.slice_var.set(0)
+        self.label_var.set(self.label_lists[0])
+        self.objects_var.set('object_0')
+        self.object_prompts.clear()
+        
+        obj_promt = ObjectPrompt(0)
+        self.object_prompts.update({0: obj_promt})
+        self.current_object = self.object_prompts.get(0)
+        self.objects_option_len = 1
 
-        # update_image = Image.fromarray(mask)
-        # self.updateImage(update_image)
+        self.objects_option['menu'].delete(1, 'end')
 
     
     def start_over(self):
         print('Start Over')
-        self.tracking_done = False
-        self.showImage(0)
-        self.slice_var.set(0)
-        self.objects_var.set('object_1')
-        for obj in self.object_prompts.values():
-            obj.clear()
+        self.reset()
 
     def save_data(self):
         pass
