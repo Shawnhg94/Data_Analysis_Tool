@@ -6,7 +6,7 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
-
+from object_manager import ObjectManager
 
 def init():
     # use bfloat16 for the entire notebook
@@ -118,34 +118,54 @@ def getMaskedImage(image, masks, scores, borders=True):
     return mask_image
 
 
-def doImagePredic(image: Image, input_point:list, input_label:list):
-    checkpoint = "./checkpoints/sam2_hiera_large.pt"
+def doImagePredic(input_path: str, frame_id: int, obj_prompts: dict, objMngr: ObjectManager):
+    device = init()
+    sam2_checkpoint = "./checkpoints/sam2_hiera_large.pt"
     model_cfg = "sam2_hiera_l.yaml"
-    predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
-    print(predictor)
+    predictor = predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device=device)
+    print('Build predictor Done')
+    #print(predictor)
+    inference_state = predictor.init_state(video_path = input_path)
+    #print(inference_state)
+    print('inference state Done')
 
-    image = np.array(image.convert("RGB"))
-    prompt = 'what is in this image?'
+    for prompt in obj_prompts.values():
+        if not prompt.isActivate():
+            continue
+        _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
+        inference_state=inference_state,
+        frame_idx=frame_id,
+        obj_id=prompt.object_id,
+        points=prompt.input_position,
+        labels=prompt.input_label,
+        )
+    #print(a)
+    print(out_obj_ids)
+    #print(out_mask_logits)
 
-    predictor.set_image(image)
-    # input_point = np.array([[75, 475]])
-    # input_label = np.array([1])
-    input_point = np.array(input_point)
-    input_label = np.array(input_label)
+    mask =  (out_mask_logits[0] > 0.0).cpu().numpy()
+    h_t, w_t = mask.shape[-2:]
+    out_img = np.zeros((h_t, w_t, 4), np.uint8)
 
+    for i in range(0, len(out_obj_ids)):
+        colour = objMngr.get_entity_colour(out_obj_ids[i])
+        if colour == None:
+            print("Object_{}".format(out_obj_ids[i]), "is not set")
+            continue
+        mask = (out_mask_logits[i] > 0.0).cpu().numpy()
+        h, w = mask.shape[-2:]
+        out_img = update_video_mask_2(mask.reshape(h, w, 1), out_img, h, w, colour)
 
-    masks, scores, logits = predictor.predict(
-        point_coords=input_point,
-        point_labels=input_label,
-        multimask_output=True,
-    )
-    sorted_ind = np.argsort(scores)[::-1]
-    masks = masks[sorted_ind]
-    scores = scores[sorted_ind]
-    logits = logits[sorted_ind]
+    img_file = io.BytesIO()
+    plt.imsave(img_file, out_img, cmap = 'BrBG')
 
-    # show_masks2(image= image, masks=masks, scores=scores, borders= True)
-    return getMaskedImage(image, masks, scores, borders=True)
+    return Image.open(img_file), predictor, inference_state, h, w
+
+def getColour(obj_id:int, objMngr: ObjectManager):
+    cmap = plt.get_cmap("tab10")
+    cmap_idx = objMngr.get_entity_colour(obj_id)
+    colour = np.array([*cmap(cmap_idx)[:3], 0.6])
+    return colour
 
 def update_video_mask(mask, frame_id, obj_id=None, random_color=False):
     if random_color:
@@ -163,8 +183,15 @@ def update_video_mask(mask, frame_id, obj_id=None, random_color=False):
     # plt.close()
     return Image.open(mask_file)
 
+def update_video_mask_2(mask_img, out_img, h: int, w: int, colour: list):
+    for y in range(0, h):
+        for x in range(0, w):
+            if (mask_img[y, x, 0]):
+                # alpha 60% = 153
+                out_img[y, x] = colour + [153]
+    return out_img
 
-def viewPreview(input_path: str, frame_id: int, obj_prompts: dict):
+def viewPreview_deactivated(input_path: str, frame_id: int, obj_prompts: dict):
     device = init()
     sam2_checkpoint = "./checkpoints/sam2_hiera_large.pt"
     model_cfg = "sam2_hiera_l.yaml"
@@ -197,7 +224,7 @@ def viewPreview(input_path: str, frame_id: int, obj_prompts: dict):
     return blended_image, predictor, inference_state
 
 
-def doVideoPredic(predictor, inference_state, frame_len: int):
+def doVideoPredic(predictor, inference_state, frame_len: int, h:int, w:int, objMngr: ObjectManager):
     video_segments = {}
     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
         video_segments[out_frame_idx] = {
@@ -205,19 +232,25 @@ def doVideoPredic(predictor, inference_state, frame_len: int):
         for i, out_obj_id in enumerate(out_obj_ids)
     }
 
-    blended_image = None
     for out_idx in range(0, frame_len):
+        out_img = np.zeros((h, w, 4), np.uint8)
         for out_obj_id, out_mask in video_segments[out_idx].items():
-            mask_image = update_video_mask(out_mask, out_idx, obj_id=out_obj_id)
-            if blended_image is None:
-                blended_image = mask_image
+            colour = objMngr.get_entity_colour(out_obj_id)
+            if colour == None:
+                print("doVideoPredic, Object_{}".format(out_obj_id), "is not set")
                 continue
-            blended_image = Image.blend(blended_image, mask_image, 0.5)
-            blended_image.save('output/{}.png'.format(out_idx))
+            height, width = out_mask.shape[-2:]
+            out_img = update_video_mask_2(out_mask.reshape(h, w, 1), out_img, height, width, colour)
+            plt.imsave('output/{}.png'.format(out_idx), out_img, cmap = 'BrBG')
     return True
         
         
 
-
+def test():
+    cmap = plt.get_cmap("tab10")
+    cmap_idx = 12
+    color = np.array([*cmap(cmap_idx)[:3], 0.6])
+    print(color)
+    print(type(color))
 
     
