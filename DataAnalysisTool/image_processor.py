@@ -6,6 +6,7 @@ import shutil
 
 image_format = '.jpg'
 image_preprocessing_output = 'preprocessing'
+image_output = 'output'
 
 w = 640
 h = 360
@@ -14,6 +15,18 @@ h = 360
 def clear_preprocessing():
     for filename in os.listdir(image_preprocessing_output):
         file_path = os.path.join(image_preprocessing_output, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+# delete all previous files
+def clear_output():
+    for filename in os.listdir(image_output):
+        file_path = os.path.join(image_output, filename)
         try:
             if os.path.isfile(file_path) or os.path.islink(file_path):
                 os.unlink(file_path)

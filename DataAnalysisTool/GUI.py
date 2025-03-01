@@ -10,6 +10,7 @@ import cv2
 import image_processor
 from object_prompt import ObjectPrompt
 from object_manager import ObjectManager
+from sam2_manager import Sam2_Manager
 import colour_map
 from threading import Thread
 from time import sleep
@@ -133,8 +134,8 @@ class DataAnalysisToolGUI:
         self.player_state = False
         self.player_thread = None
 
-        sam2_repository.test()
-
+        # SAM2 Object
+        self.sam2_manager = Sam2_Manager()
 
     
     def load_directory(self):
@@ -312,20 +313,17 @@ class DataAnalysisToolGUI:
 
     def check_preview(self):
         frame_id = self.slice_var.get()
-        update_image, _, _, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
-        #update_image = Image.open('output/{}.png'.format(frame_id))
+        #update_image, _, _, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
+        update_image, h, w = self.sam2_manager.doImagePredic(frame_id, self.object_prompts, self.obj_mnger)
         self.updateOutputImage(update_image)
     
     def start_tracking(self):
-        self.tracking_done = True
+        image_processor.clear_output()
         frame_id = self.slice_var.get()
-        print('frame_id: ', frame_id)
-        self.showImage(frame_id)
-        return
-        frame_id = self.slice_var.get()
-        update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
-        self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, self.frame_num, h, w, objMngr = self.obj_mnger)
-
+        # update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
+        # self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, frame_id, self.frame_num, h, w, objMngr = self.obj_mnger)
+        update_image, h, w = self.sam2_manager.doImagePredic(frame_id, self.object_prompts, self.obj_mnger)
+        self.tracking_done = self.sam2_manager.doVideoPredic(frame_id, self.frame_num, h, w, self.obj_mnger)
         self.updateOutputImage(update_image)
         
     def reset(self):
@@ -342,6 +340,9 @@ class DataAnalysisToolGUI:
         self.objects_option_len = 1
 
         self.objects_option['menu'].delete(1, 'end')
+        
+        # init preditor and inference
+        self.sam2_manager.init_inference(image_processor.image_preprocessing_output)
 
     
     def start_over(self):

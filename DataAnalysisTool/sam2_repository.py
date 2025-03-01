@@ -224,7 +224,7 @@ def viewPreview_deactivated(input_path: str, frame_id: int, obj_prompts: dict):
     return blended_image, predictor, inference_state
 
 
-def doVideoPredic(predictor, inference_state, frame_len: int, h:int, w:int, objMngr: ObjectManager):
+def doVideoPredic(predictor, inference_state, frame_id: int, frame_len: int, h:int, w:int, objMngr: ObjectManager):
     video_segments = {}
     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
         video_segments[out_frame_idx] = {
@@ -232,7 +232,7 @@ def doVideoPredic(predictor, inference_state, frame_len: int, h:int, w:int, objM
         for i, out_obj_id in enumerate(out_obj_ids)
     }
 
-    for out_idx in range(0, frame_len):
+    for out_idx in range(frame_id, frame_len):
         out_img = np.zeros((h, w, 4), np.uint8)
         for out_obj_id, out_mask in video_segments[out_idx].items():
             colour = objMngr.get_entity_colour(out_obj_id)
