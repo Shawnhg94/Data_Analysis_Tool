@@ -82,8 +82,8 @@ class DataAnalysisToolGUI:
 
         # Create a Option menu for Tracking Objects
         self.objects_var = tk.StringVar()
-        self.objects_var.set('object_0')
-        self.objects_option = tk.OptionMenu(self.border, self.objects_var, "object_0", command=self.object_select)
+        self.objects_var.set('-------')
+        self.objects_option = tk.OptionMenu(self.border, self.objects_var, "-------", command=self.object_select)
         self.objects_option.config(width=10)
         self.objects_option.grid(column = 1, row = 8, padx = 10, pady = 10, sticky="nsew")
 
@@ -93,7 +93,7 @@ class DataAnalysisToolGUI:
         obj_promt = ObjectPrompt(0)
         self.object_prompts.update({0: obj_promt})
         self.current_object = self.object_prompts.get(0)
-        self.objects_option_len = 1
+        self.objects_option_len = 0
 
         # Create a "Add" button
         self.object_add_button = tk.Button(self.border, text="  Add ", command=self.add_object)
@@ -137,6 +137,9 @@ class DataAnalysisToolGUI:
         # SAM2 Object
         self.sam2_manager = Sam2_Manager()
 
+        # start frame id
+        self.start_frame_id = -1
+
     
     def load_directory(self):
         # Open a file selection dialog box to choose an image file
@@ -146,6 +149,7 @@ class DataAnalysisToolGUI:
         self.frame_num = num_images
         self.showFrameController()
         self.showImage(0)
+        self.sam2_manager.init_inference(image_processor.image_preprocessing_output)
         self.reset()
 
 
@@ -191,16 +195,20 @@ class DataAnalysisToolGUI:
         self.origin_image = Image.open(full_path)
         self.updateImage(self.origin_image)
         if self.tracking_done:
-            full_path = 'output/{}.png'.format(frame_id)
-            output_image = Image.open(full_path)
+            try:
+                full_path = 'output/{}.png'.format(frame_id)
+                output_image = Image.open(full_path)
+            except:
+                output_image = self.output_image     
         else:
             output_image = self.output_image
         self.updateOutputImage(output_image)
+        self.draw_inputs()
 
     def updateOutputImage(self, update_image):
         # Resize the image to fit in the image_label label
         width, height = update_image.size
-        print(width, height)
+        # print(width, height)
         photo = ImageTk.PhotoImage(update_image)
         self.output_frame.configure(image=photo)
         self.output_frame.image = photo
@@ -209,7 +217,7 @@ class DataAnalysisToolGUI:
     def updateImage(self, update_image):
         # Resize the image to fit in the image_label label
         width, height = update_image.size
-        print(width, height)
+        # print(width, height)
         photo = ImageTk.PhotoImage(update_image)
         self.input_frame.configure(image=photo)
         self.input_frame.image = photo
@@ -220,8 +228,7 @@ class DataAnalysisToolGUI:
         frame_id = self.slice_var.get()
         print('frame_id: ', frame_id)
         self.showImage(frame_id)
-        for obj in self.object_prompts.values():
-            obj.clear()
+        
 
     def object_select(self, event):
         print(event)
@@ -236,17 +243,25 @@ class DataAnalysisToolGUI:
         if (self.object_input_mode == 'none'):
             return
         
+        frame_id = self.slice_var.get()
+        if (self.start_frame_id < 0 or frame_id < self.start_frame_id):
+            self.start_frame_id = frame_id
+        self.current_object.addFrameId(frame_id)
         if self.object_input_mode == 'add':
             self.current_object.addPrompt([event.x,event.y], 1)
         else:
             self.current_object.addPrompt([event.x,event.y], 0)
+        
         print('positions:', str(self.current_object.input_position))
         print('label:', str(self.current_object.input_label))
 
+        self.draw_inputs()
 
+    def draw_inputs(self):
+        frame_id = self.slice_var.get()
         np_origin = np.array(self.origin_image)
         for obj_prompt in self.object_prompts.values():
-            if not obj_prompt.isActivate():
+            if not obj_prompt.isActivate() or not obj_prompt.hasFrameId(frame_id):
                 continue
             obj_id = obj_prompt.getId()
             for i in range(0, len(obj_prompt.input_position)):
@@ -258,20 +273,18 @@ class DataAnalysisToolGUI:
                     cv2.drawMarker(np_origin, (pos[0], pos[1]), (250, 0, 0), cv2.MARKER_STAR, 10, 1)
         update_image = Image.fromarray(np_origin)
         self.updateImage(update_image)
-        # update object options if needed 
-        self.update_options()
 
     def update_options(self):
-        if (self.current_object.getId() != self.objects_option_len -1):
-            print('update_options return')
+        if (self.current_object.getId() != self.objects_option_len):
+            print('update_options return', self.current_object.getId(), self.objects_option_len)
             return
         #self.objects_var.set('')
+        self.objects_option_len += 1
         choice = 'object_{}'.format(self.objects_option_len)
         self.objects_option['menu'].add_command(label = choice, command=tk._setit(self.objects_var, choice, self.object_select))
         # update object_prompts
         obj_promt = ObjectPrompt(self.objects_option_len)
         self.object_prompts.update({self.objects_option_len: obj_promt})
-        self.objects_option_len += 1
 
 
     def play_frame(self):
@@ -300,6 +313,8 @@ class DataAnalysisToolGUI:
         obj_id = self.current_object.getId()
         print("entity_name: {}, obj_id: {}".format(entity_name, obj_id))
         self.obj_mnger.set(obj_index= obj_id, obj_name=entity_name)
+        # update object options if needed 
+        self.update_options()
 
     def clear_label(self):
         obj_id = self.current_object.getId()
@@ -319,30 +334,39 @@ class DataAnalysisToolGUI:
     
     def start_tracking(self):
         image_processor.clear_output()
-        frame_id = self.slice_var.get()
         # update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
         # self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, frame_id, self.frame_num, h, w, objMngr = self.obj_mnger)
-        update_image, h, w = self.sam2_manager.doImagePredic(frame_id, self.object_prompts, self.obj_mnger)
-        self.tracking_done = self.sam2_manager.doVideoPredic(frame_id, self.frame_num, h, w, self.obj_mnger)
-        self.updateOutputImage(update_image)
+
+        if self.tracking_done:
+            self.tracking_done = False
+            self.sam2_manager.reset_init()
+        self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, self.start_frame_id, self.frame_num, self.obj_mnger)
+        self.slice_var.set(0)
+        self.showImage(0)
+        
         
     def reset(self):
         self.tracking_done = False
-        self.showImage(0)
         self.slice_var.set(0)
         self.label_var.set(self.label_lists[0])
-        self.objects_var.set('object_0')
+        self.objects_var.set('-------')
+        for obj_prompt in self.object_prompts.values():
+            obj_prompt.clear()
+
         self.object_prompts.clear()
         
         obj_promt = ObjectPrompt(0)
         self.object_prompts.update({0: obj_promt})
         self.current_object = self.object_prompts.get(0)
-        self.objects_option_len = 1
+        self.objects_option_len = 0
 
         self.objects_option['menu'].delete(1, 'end')
+        self.start_frame_id = -1
         
         # init preditor and inference
-        self.sam2_manager.init_inference(image_processor.image_preprocessing_output)
+        self.sam2_manager.reset_init()
+        self.showImage(0)
+        self.update_options()
 
     
     def start_over(self):
