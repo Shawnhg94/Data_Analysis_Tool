@@ -228,9 +228,9 @@ def doVideoPredic(predictor, inference_state, frame_id: int, frame_len: int, h:i
     video_segments = {}
     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
         video_segments[out_frame_idx] = {
-        out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-        for i, out_obj_id in enumerate(out_obj_ids)
-    }
+            out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+            for i, out_obj_id in enumerate(out_obj_ids)
+        }
 
     for out_idx in range(frame_id, frame_len):
         out_img = np.zeros((h, w, 4), np.uint8)

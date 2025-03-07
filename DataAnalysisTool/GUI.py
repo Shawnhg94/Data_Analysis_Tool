@@ -353,7 +353,7 @@ class DataAnalysisToolGUI:
             self.sam2_manager.reset_init()
 
         start_index = int(self.range_begin.get())
-        max_index = int(self.range_end.get()) + 1
+        max_index = int(self.range_end.get())
         self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, start_index, max_index, self.obj_mnger)
         self.slice_var.set(0)
         self.showImage(0)

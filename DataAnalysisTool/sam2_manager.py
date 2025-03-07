@@ -105,32 +105,12 @@ class Sam2_Manager():
         video_segments = {}
         for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
                                                                                              start_frame_idx = start_frame_id, 
-                                                                                             max_frame_num_to_track = frame_len):
+                                                                                             max_frame_num_to_track = frame_len + 1):
             video_segments[out_frame_idx] = {
-            out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-            for i, out_obj_id in enumerate(out_obj_ids)
-        }
-
-        for out_idx in range(start_frame_id, frame_len):
-            out_img = np.zeros((h, w, 4), np.uint8)
-            for out_obj_id, out_mask in video_segments[out_idx].items():
-                colour = objMngr.get_entity_colour(out_obj_id)
-                if colour == None:
-                    print("doVideoPredic, Object_{}".format(out_obj_id), "is not set")
-                    continue
-                height, width = out_mask.shape[-2:]
-                out_img = self.update_video_mask(out_mask.reshape(h, w, 1), out_img, height, width, colour)
-                plt.imsave('output/{}.png'.format(out_idx), out_img, cmap = 'BrBG')
-        print('Tracking Done')
-        return True
-    
-    def doVideoPredic_V2(self, h:int, w:int, start_frame_id: int, frame_len: int, objMngr: ObjectManager):
-        video_segments = {}
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state):
-            video_segments[out_frame_idx] = {
-            out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-            for i, out_obj_id in enumerate(out_obj_ids)
-        }
+                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                for i, out_obj_id in enumerate(out_obj_ids)
+            }
+        print('out_frame_idx', out_frame_idx)
 
         for out_idx in range(start_frame_id, frame_len):
             out_img = np.zeros((h, w, 4), np.uint8)
