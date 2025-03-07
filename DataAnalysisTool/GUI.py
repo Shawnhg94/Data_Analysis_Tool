@@ -115,20 +115,31 @@ class DataAnalysisToolGUI:
         self.preview_button = tk.Button(self.border, text="Preview", command=self.check_preview)
         self.preview_button.grid(column = 1, row = 10, padx = 10, pady = 10, sticky="nw")
 
+        # Range Label
+        self.range_label = tk.Label(self.border, text=' Tracking Range ', relief=tk.FLAT)
+        self.range_label.grid(column = 1, row = 11, padx = 10, pady = 10, sticky="sw")
+
+        # Range Entry
+        self.range_begin = tk.Entry(self.border, width=7, relief=tk.FLAT)
+        self.range_begin.grid(column = 1, row = 12, padx = 10, pady = 10, sticky="nw")
+
+        self.range_end = tk.Entry(self.border, width=7, relief=tk.FLAT)
+        self.range_end.grid(column = 1, row = 12, padx = 10, pady = 10, sticky="ne")
+
         # Create a "start tracking" button
         self.start_tracking_button = tk.Button(self.border, text="Start Tracking", command=self.start_tracking)
-        self.start_tracking_button.grid(column = 1, row = 11, padx = 10, pady = 10, sticky="nw")
+        self.start_tracking_button.grid(column = 1, row = 13, padx = 10, pady = 10, sticky="nw")
 
         # Set Tracking Done
         self.tracking_done = False
 
         # Create a "start over" button
         self.start_over_button = tk.Button(self.border, text="Start Over", command=self.start_over)
-        self.start_over_button.grid(column = 1, row = 12, padx = 10, pady = 10, sticky="nw")
+        self.start_over_button.grid(column = 1, row = 14, padx = 10, pady = 10, sticky="nw")
 
         # Create a "save data" button
         self.save_data_button = tk.Button(self.border, text="Save Data", command=self.save_data)
-        self.save_data_button.grid(column = 1, row = 13, padx = 10, pady = 10, sticky="nw")
+        self.save_data_button.grid(column = 1, row = 15, padx = 10, pady = 10, sticky="nw")
 
         # Player
         self.player_state = False
@@ -246,7 +257,7 @@ class DataAnalysisToolGUI:
         frame_id = self.slice_var.get()
         if (self.start_frame_id < 0 or frame_id < self.start_frame_id):
             self.start_frame_id = frame_id
-        self.current_object.addFrameId(frame_id)
+        self.current_object.setFrameId(frame_id)
         if self.object_input_mode == 'add':
             self.current_object.addPrompt([event.x,event.y], 1)
         else:
@@ -261,7 +272,7 @@ class DataAnalysisToolGUI:
         frame_id = self.slice_var.get()
         np_origin = np.array(self.origin_image)
         for obj_prompt in self.object_prompts.values():
-            if not obj_prompt.isActivate() or not obj_prompt.hasFrameId(frame_id):
+            if not obj_prompt.isActivate() or obj_prompt.getFrameId() != frame_id:
                 continue
             obj_id = obj_prompt.getId()
             for i in range(0, len(obj_prompt.input_position)):
@@ -340,11 +351,21 @@ class DataAnalysisToolGUI:
         if self.tracking_done:
             self.tracking_done = False
             self.sam2_manager.reset_init()
-        self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, self.start_frame_id, self.frame_num, self.obj_mnger)
+
+        start_index = int(self.range_begin.get())
+        max_index = int(self.range_end.get()) + 1
+        self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, start_index, max_index, self.obj_mnger)
         self.slice_var.set(0)
         self.showImage(0)
-        
-        
+
+    def set_range_begin(self, begin:int):
+        self.range_begin.delete(0, tk.END)
+        self.range_begin.insert(0, str(begin))
+
+    def set_range_end(self, end:int):
+        self.range_end.delete(0, tk.END)
+        self.range_end.insert(0, str(end))
+
     def reset(self):
         self.tracking_done = False
         self.slice_var.set(0)
@@ -368,10 +389,15 @@ class DataAnalysisToolGUI:
         self.showImage(0)
         self.update_options()
 
+        # init range
+        self.set_range_begin(0)
+        self.set_range_end(self.frame_num)
+
     
     def start_over(self):
         print('Start Over')
         self.reset()
+
 
     def save_data(self):
         pass
