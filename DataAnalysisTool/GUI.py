@@ -14,6 +14,7 @@ from sam2_manager import Sam2_Manager
 import colour_map
 from threading import Thread
 from time import sleep
+from label_manager import LabelManager
 
 
 class DataAnalysisToolGUI:
@@ -151,11 +152,15 @@ class DataAnalysisToolGUI:
         # start frame id
         self.start_frame_id = -1
 
+        # Label_manger
+        self.label_manager = LabelManager()
+
+
     
     def load_directory(self):
         # Open a file selection dialog box to choose an image file
         self.file_path = filedialog.askdirectory(title="Select Input Folder")
-        print(self.file_path)
+        # print(self.file_path)
         num_images = image_processor.image_preprocessing(self.file_path)
         self.frame_num = num_images
         self.showFrameController()
@@ -207,8 +212,10 @@ class DataAnalysisToolGUI:
         self.updateImage(self.origin_image)
         if self.tracking_done:
             try:
-                full_path = 'output/{}.png'.format(frame_id)
+                full_path = 'output_display/{}.png'.format(frame_id)
                 output_image = Image.open(full_path)
+                #output_image = image_processor.convert_out_image(self.label_manager, output_image)
+
             except:
                 output_image = self.output_image     
         else:
@@ -354,7 +361,7 @@ class DataAnalysisToolGUI:
 
         start_index = int(self.range_begin.get())
         max_index = int(self.range_end.get())
-        self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, start_index, max_index, self.obj_mnger)
+        self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, start_index, max_index + 1, self.obj_mnger)
         self.slice_var.set(0)
         self.showImage(0)
 
@@ -391,7 +398,7 @@ class DataAnalysisToolGUI:
 
         # init range
         self.set_range_begin(0)
-        self.set_range_end(self.frame_num)
+        self.set_range_end(self.frame_num-1)
 
     
     def start_over(self):
@@ -400,7 +407,11 @@ class DataAnalysisToolGUI:
 
 
     def save_data(self):
-        pass
+        full_path = 'output/{}.png'.format(0)
+        output_image = Image.open(full_path)
+        out_img = image_processor.convert_out_image(self.label_manager, output_image)
+        self.updateOutputImage(out_img)
+        # pass
 
             
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ from PIL import ImageTk, Image
 import matplotlib.pyplot as plt
 import cv2
 import shutil
+from label_manager import LabelManager
+import numpy as np
 
 image_format = '.jpg'
 image_preprocessing_output = 'preprocessing'
@@ -52,3 +54,19 @@ def image_preprocessing(input_path: str) -> int:
 
 
     return length
+
+def convert_out_image(label_manager: LabelManager, img : Image):
+    out_img = np.zeros((h, w, 4), np.uint8)
+    img_array = np.array(img)
+
+    #print('img_array:', img_array.shape)
+
+    for y in range(0, h):
+        for x in range(0, w):
+            label_id = img_array[y, x]
+            if label_id > 0:
+                colour = label_manager.get_colour(label_id)
+                # alpha 60% = 153
+                out_img[y, x] = colour + [153]
+    
+    return Image.fromarray(out_img, mode='RGBA')

@@ -38,3 +38,8 @@ class ObjectManager:
         if (obj_index in self.object_labels):
             return self.object_labels[obj_index].colour
         return None
+    
+    def get_entity_id(self, obj_index: int):
+        if (obj_index in self.object_labels):
+            return self.object_labels[obj_index].id
+        return None

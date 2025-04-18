@@ -49,6 +49,15 @@ class Sam2_Manager():
                     # alpha 60% = 153
                     out_img[y, x] = colour + [153]
         return out_img
+    
+    def update_video_mask_tmp(self, mask_img, out_img, out_display, h: int, w: int, id: int, colour: list):
+        for y in range(0, h):
+            for x in range(0, w):
+                if (mask_img[y, x, 0]):
+                    # alpha 60% = 153
+                    out_img[y, x] = id
+                    out_display[y, x] = colour + [153]
+        return out_img, out_display
 
     def doImagePredic(self, frame_id: int, obj_prompts: dict, objMngr: ObjectManager):
 
@@ -105,7 +114,7 @@ class Sam2_Manager():
         video_segments = {}
         for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
                                                                                              start_frame_idx = start_frame_id, 
-                                                                                             max_frame_num_to_track = frame_len + 1):
+                                                                                             max_frame_num_to_track = frame_len - 1):
             video_segments[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                 for i, out_obj_id in enumerate(out_obj_ids)
@@ -113,14 +122,21 @@ class Sam2_Manager():
         print('out_frame_idx', out_frame_idx)
 
         for out_idx in range(start_frame_id, frame_len):
-            out_img = np.zeros((h, w, 4), np.uint8)
+            out_display = np.zeros((h, w, 4), np.uint8)
+            out_img = np.zeros((h, w), np.uint8)
             for out_obj_id, out_mask in video_segments[out_idx].items():
                 colour = objMngr.get_entity_colour(out_obj_id)
-                if colour == None:
+                id = objMngr.get_entity_id(out_obj_id)
+                if id == 0:
                     print("doVideoPredic, Object_{}".format(out_obj_id), "is not set")
                     continue
                 height, width = out_mask.shape[-2:]
-                out_img = self.update_video_mask(out_mask.reshape(h, w, 1), out_img, height, width, colour)
-                plt.imsave('output/{}.png'.format(out_idx), out_img, cmap = 'BrBG')
+                # out_img = self.update_video_mask(out_mask.reshape(h, w, 1), out_img, height, width, colour)
+                out_img, out_display = self.update_video_mask_tmp(out_mask.reshape(h, w, 1), out_img, out_display, height, width, id, colour)
+            
+                plt.imsave('output_display/{}.png'.format(out_idx), out_display, cmap = 'BrBG')
+                img_pil = Image.fromarray(out_img, mode='L')
+                img_pil.save('output/{}.png'.format(out_idx))
+                #plt.imsave('output/{}.png'.format(out_idx), out_img, cmap = 'gray')
         print('Tracking Done')
         return True
