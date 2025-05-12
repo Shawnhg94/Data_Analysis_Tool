@@ -201,7 +201,9 @@ class DataAnalysisToolGUI:
         #  Create a Scale widget for setting Slice ID        
         self.slice_var = tk.IntVar()
         self.slice_var.set(0)
-        self.slice_scale = tk.Scale(self.image_border, width=20, length = image_processor.w, from_=0, to=self.frame_num - 1, orient=tk.HORIZONTAL, label="Frame ID", variable=self.slice_var)
+        self.slice_scale = tk.Scale(self.image_border, width=20, length = image_processor.w, 
+                                    from_=0, to=self.frame_num - 1, orient=tk.HORIZONTAL, label="Frame ID", 
+                                    variable=self.slice_var)
         self.slice_scale.bind("<ButtonRelease-1>", self.updateFrameId)
         self.slice_scale.grid(column = 1, row = 4, sticky="sw", padx = 10, pady = 10)
 
@@ -351,10 +353,14 @@ class DataAnalysisToolGUI:
         self.updateOutputImage(update_image)
     
     def start_tracking(self):
-        image_processor.clear_output()
+        #image_processor.clear_output()
         # update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
         # self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, frame_id, self.frame_num, h, w, objMngr = self.obj_mnger)
+        self.tracking_done =True
+        self.slice_var.set(0)
+        self.showImage(0)
 
+        return 
         if self.tracking_done:
             self.tracking_done = False
             self.sam2_manager.reset_init()
@@ -362,8 +368,8 @@ class DataAnalysisToolGUI:
         start_index = int(self.range_begin.get())
         max_index = int(self.range_end.get())
         self.tracking_done = self.sam2_manager.doVideoPredic(self.object_prompts, start_index, max_index + 1, self.obj_mnger)
-        self.slice_var.set(0)
-        self.showImage(0)
+        self.slice_var.set(start_index)
+        self.showImage(start_index)
 
     def set_range_begin(self, begin:int):
         self.range_begin.delete(0, tk.END)
