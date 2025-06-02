@@ -10,8 +10,8 @@ image_format = '.jpg'
 image_preprocessing_output = 'preprocessing'
 image_output = 'output'
 
-w = 640
-h = 360
+w = 400
+h = 240
 
 # delete all previous files
 def clear_preprocessing():

@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import sam2_repository
 import numpy as np
 import cv2
-import image_processor
+from image_manager import ImageManager
+import image_manager
 from object_prompt import ObjectPrompt
 from object_manager import ObjectManager
 from sam2_manager import Sam2_Manager
@@ -15,6 +16,7 @@ import colour_map
 from threading import Thread
 from time import sleep
 from label_manager import LabelManager
+from data_manager import DataManager
 
 
 class DataAnalysisToolGUI:
@@ -105,7 +107,7 @@ class DataAnalysisToolGUI:
         self.object_remove_button.grid(column = 1, row = 9, padx = 10, pady = 10, sticky="ne")
 
         # Set object output image
-        image = np.zeros((image_processor.h, image_processor.w, 3), dtype = np.uint8)
+        image = np.zeros((image_manager.H, image_manager.W, 3), dtype = np.uint8)
         image = 255*image
         self.output_image = Image.fromarray(image)
         
@@ -159,28 +161,25 @@ class DataAnalysisToolGUI:
     
     def load_directory(self):
         # Open a file selection dialog box to choose an image file
+        #self.file_path = filedialog.askdirectory(title="Select Input Folder")
+        #num_images = image_processor.image_preprocessing(self.file_path)
+        #self.frame_num = num_images
+        # self.showFrameController()
+        # self.showImage(0)
+        # self.sam2_manager.init_inference(image_processor.image_preprocessing_output)
+        # self.reset()
+
         self.file_path = filedialog.askdirectory(title="Select Input Folder")
-        # print(self.file_path)
-        num_images = image_processor.image_preprocessing(self.file_path)
-        self.frame_num = num_images
+        self.img_manager = ImageManager(self.file_path)
+        self.frame_num = self.img_manager.get_num()
+        self.img_manager.image_preprocessing()
         self.showFrameController()
         self.showImage(0)
-        self.sam2_manager.init_inference(image_processor.image_preprocessing_output)
+        path = self.img_manager.get_path()
+        print('load path', path)
+        self.sam2_manager.init_inference('/home/forev/project/Data_Analysis_Tool/preprocessing')
         self.reset()
-
-
-    def load_image(self):
-        # Open a file selection dialog box to choose an image file
-        self.file_path = filedialog.askopenfilename(title="Select Image File", filetypes=[('JPG Files', '*.jpg'), ('Png Files', '*.png'), ('jpeg Files', '*.jpeg'), ('bmp Files', '*.bmp'), ('gif Files', '*.gif')])
-        print(self.file_path)
-        self.origin_image = Image.open(self.file_path)
-        photo = ImageTk.PhotoImage(self.origin_image)
-        self.input_frame.configure(image=photo)
-        self.input_frame.image = photo
-
-        # self.output_frame.configure(image=photo)
-        # self.output_frame.image = photo
-        # self.showSliceIDBar()
+        self.data_manager = DataManager(self.img_manager)
 
     def imagePreProcessing(self):
         entries = os.listdir(self.file_path+'/')
@@ -201,17 +200,15 @@ class DataAnalysisToolGUI:
         #  Create a Scale widget for setting Slice ID        
         self.slice_var = tk.IntVar()
         self.slice_var.set(0)
-        self.slice_scale = tk.Scale(self.image_border, width=20, length = image_processor.w, 
+        self.slice_scale = tk.Scale(self.image_border, width=20, length = image_manager.W, 
                                     from_=0, to=self.frame_num - 1, orient=tk.HORIZONTAL, label="Frame ID", 
                                     variable=self.slice_var)
         self.slice_scale.bind("<ButtonRelease-1>", self.updateFrameId)
         self.slice_scale.grid(column = 1, row = 4, sticky="sw", padx = 10, pady = 10)
 
     def showImage(self, frame_id):
-        file_name = '{}.jpg'.format(frame_id)
-        full_path = image_processor.image_preprocessing_output + '/' + file_name
-        self.origin_image = Image.open(full_path)
-        self.updateImage(self.origin_image)
+        self.origin_image = self.img_manager.get_img(frame_id)
+        in_photo = self.img_manager.get_photo(frame_id)
         if self.tracking_done:
             try:
                 full_path = 'output_display/{}.png'.format(frame_id)
@@ -222,8 +219,15 @@ class DataAnalysisToolGUI:
                 output_image = self.output_image     
         else:
             output_image = self.output_image
-        self.updateOutputImage(output_image)
+        out_photo = self.img_manager.convert_photo(output_image)
+
+        self.input_frame.configure(image=in_photo)
+        self.input_frame.image = in_photo
+
+        self.output_frame.configure(image=out_photo)
+        self.output_frame.image = out_photo
         self.draw_inputs()
+
 
     def updateOutputImage(self, update_image):
         # Resize the image to fit in the image_label label
@@ -356,11 +360,11 @@ class DataAnalysisToolGUI:
         #image_processor.clear_output()
         # update_image, predictor, inference_state, h, w = sam2_repository.doImagePredic(image_processor.image_preprocessing_output, frame_id, self.object_prompts, self.obj_mnger)
         # self.tracking_done = sam2_repository.doVideoPredic(predictor, inference_state, frame_id, self.frame_num, h, w, objMngr = self.obj_mnger)
-        self.tracking_done =True
-        self.slice_var.set(0)
-        self.showImage(0)
+        # self.tracking_done =True
+        # self.slice_var.set(0)
+        # self.showImage(0)
 
-        return 
+        # return 
         if self.tracking_done:
             self.tracking_done = False
             self.sam2_manager.reset_init()
@@ -413,11 +417,16 @@ class DataAnalysisToolGUI:
 
 
     def save_data(self):
-        full_path = 'output/{}.png'.format(0)
-        output_image = Image.open(full_path)
-        out_img = image_processor.convert_out_image(self.label_manager, output_image)
-        self.updateOutputImage(out_img)
-        # pass
+        if not self.tracking_done:
+            print('Tracking Not Done')
+            return
+        
+        start_index = int(self.range_begin.get())
+        max_index = int(self.range_end.get())
+
+        self.data_manager.save(start_index, max_index + 1)
+        #self.data_manager.test()
+
 
             
 if __name__ == "__main__":
