@@ -16,3 +16,10 @@ class LabelManager:
     
     def get_colour(self, id:int):
         return self.obj_entity_map[id].colour
+
+def parse_label(filepath:str):
+    with open(filepath, 'r') as file:
+        config = yaml.safe_load(file)
+
+    # return list(config.values())
+    return config
